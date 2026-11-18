@@ -1,25 +1,12 @@
 using Claims.Auditing;
-using Claims.Controllers;
+using Claims.Data;
+using Claims.Services;
+using Claims.Validators;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Driver;
-using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
-using Testcontainers.MongoDb;
-using Testcontainers.MsSql;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Start Testcontainers for SQL Server and MongoDB
-var sqlContainer = new MsSqlBuilder(RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-        ? "mcr.microsoft.com/mssql/server:2022-latest"
-        : "mcr.microsoft.com/mssql/server:2019-CU18-ubuntu-20.04")
-    .Build();
-
-var mongoContainer = new MongoDbBuilder("mongo:latest")
-    .Build();
-
-await sqlContainer.StartAsync();
-await mongoContainer.StartAsync();
 
 // Add services to the container.
 builder.Services
@@ -29,15 +16,29 @@ builder.Services
         x.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
+// SQL Server (LocalDB) for Audit
 builder.Services.AddDbContext<AuditContext>(options =>
-    options.UseSqlServer(sqlContainer.GetConnectionString()));
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("AuditDb"));
+    options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+});
 
+// MongoDB Atlas for Claims
 builder.Services.AddDbContext<ClaimsContext>(options =>
 {
-    var client = new MongoClient(mongoContainer.GetConnectionString());
-    var database = client.GetDatabase(builder.Configuration["MongoDb:DatabaseName"]); // Use a default/test database name
-    options.UseMongoDB(database.Client, database.DatabaseNamespace.DatabaseName);
+    var connectionString = builder.Configuration.GetConnectionString("MongoDb");
+    var databaseName = builder.Configuration["MongoDb:DatabaseName"];
+    var client = new MongoClient(connectionString);
+    options.UseMongoDB(client, databaseName);
 });
+
+// Register validators (SOLID: Dependency Inversion - depend on abstractions)
+builder.Services.AddScoped<ICoverValidator, CoverValidator>();
+builder.Services.AddScoped<IClaimValidator, ClaimValidator>();
+
+// Register services
+builder.Services.AddScoped<ICoversService, CoversService>();
+builder.Services.AddScoped<IClaimsService, ClaimsService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -58,6 +59,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Apply EF migrations for SQL Server
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AuditContext>();
