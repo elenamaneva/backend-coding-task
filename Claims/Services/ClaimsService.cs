@@ -7,13 +7,13 @@ namespace Claims.Services;
 public class ClaimsService : IClaimsService
 {
     private readonly ClaimsContext _claimsContext;
-    private readonly Auditer _auditer;
+    private readonly IAuditer _auditer;
     private readonly IClaimValidator _claimValidator;
 
-    public ClaimsService(ClaimsContext claimsContext, AuditContext auditContext, IClaimValidator claimValidator)
+    public ClaimsService(ClaimsContext claimsContext, IAuditer auditer, IClaimValidator claimValidator)
     {
         _claimsContext = claimsContext;
-        _auditer = new Auditer(auditContext);
+        _auditer = auditer;
         _claimValidator = claimValidator;
     }
 
@@ -38,13 +38,18 @@ public class ClaimsService : IClaimsService
 
         claim.Id = Guid.NewGuid().ToString();
         await _claimsContext.AddClaimAsync(claim);
-        _auditer.AuditClaim(claim.Id, "POST");
+        
+        // Audit asynchronously - doesn't block the response
+        await _auditer.AuditClaimAsync(claim.Id, "POST");
+        
         return (claim, null);
     }
 
     public async Task DeleteAsync(string id)
     {
-        _auditer.AuditClaim(id, "DELETE");
+        // Audit asynchronously - doesn't block the response
+        await _auditer.AuditClaimAsync(id, "DELETE");
+        
         await _claimsContext.DeleteClaimAsync(id);
     }
 }

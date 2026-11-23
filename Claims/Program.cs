@@ -32,6 +32,11 @@ builder.Services.AddDbContext<ClaimsContext>(options =>
     options.UseMongoDB(client, databaseName);
 });
 
+// Register audit queue and background service (async auditing)
+builder.Services.AddSingleton<IAuditQueue, InMemoryAuditQueue>();
+builder.Services.AddHostedService<AuditBackgroundService>();
+builder.Services.AddScoped<IAuditer, Auditer>();
+
 // Register validators (SOLID: Dependency Inversion - depend on abstractions)
 builder.Services.AddScoped<ICoverValidator, CoverValidator>();
 builder.Services.AddScoped<IClaimValidator, ClaimValidator>();
@@ -42,7 +47,19 @@ builder.Services.AddScoped<IClaimsService, ClaimsService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // Show enum values as strings in Swagger
+    options.UseInlineDefinitionsForEnums();
+    
+    // Include XML comments for better documentation
+    var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
 
 var app = builder.Build();
 

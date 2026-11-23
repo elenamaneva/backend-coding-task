@@ -1,38 +1,43 @@
-﻿namespace Claims.Auditing
+﻿namespace Claims.Auditing;
+
+/// <summary>
+/// Auditer implementation that queues audit messages for asynchronous processing.
+/// Messages are processed by AuditBackgroundService.
+/// </summary>
+public class Auditer : IAuditer
 {
-    public class Auditer
+    private readonly IAuditQueue _auditQueue;
+
+    public Auditer(IAuditQueue auditQueue)
     {
-        private readonly AuditContext _auditContext;
+        _auditQueue = auditQueue;
+    }
 
-        public Auditer(AuditContext auditContext)
+    /// <inheritdoc />
+    public async ValueTask AuditClaimAsync(string claimId, string httpRequestType, CancellationToken cancellationToken = default)
+    {
+        var message = new AuditMessage
         {
-            _auditContext = auditContext;
-        }
+            EntityType = AuditEntityType.Claim,
+            EntityId = claimId,
+            HttpRequestType = httpRequestType,
+            Created = DateTime.UtcNow
+        };
 
-        public void AuditClaim(string id, string httpRequestType)
+        await _auditQueue.EnqueueAsync(message, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask AuditCoverAsync(string coverId, string httpRequestType, CancellationToken cancellationToken = default)
+    {
+        var message = new AuditMessage
         {
-            var claimAudit = new ClaimAudit()
-            {
-                Created = DateTime.Now,
-                HttpRequestType = httpRequestType,
-                ClaimId = id
-            };
+            EntityType = AuditEntityType.Cover,
+            EntityId = coverId,
+            HttpRequestType = httpRequestType,
+            Created = DateTime.UtcNow
+        };
 
-            _auditContext.Add(claimAudit);
-            _auditContext.SaveChanges();
-        }
-        
-        public void AuditCover(string id, string httpRequestType)
-        {
-            var coverAudit = new CoverAudit()
-            {
-                Created = DateTime.Now,
-                HttpRequestType = httpRequestType,
-                CoverId = id
-            };
-
-            _auditContext.Add(coverAudit);
-            _auditContext.SaveChanges();
-        }
+        await _auditQueue.EnqueueAsync(message, cancellationToken);
     }
 }
