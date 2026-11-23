@@ -1,9 +1,16 @@
 namespace Claims.Validators;
 
+/// <summary>
+/// Validates insurance covers against business rules.
+/// </summary>
 public class CoverValidator : ICoverValidator
 {
+    /// <summary>
+    /// Maximum allowed insurance period in days (1 year).
+    /// </summary>
     private const int MaxInsurancePeriodDays = 365;
 
+    /// <inheritdoc />
     public (bool IsValid, string? Error) Validate(Cover cover)
     {
         // Rule 1: StartDate cannot be in the past
